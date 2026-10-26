@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Pulse | Auto-Updating News Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,800;1,600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .serif { font-family: 'Playfair Display', serif; }
+    .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); }
+    .dark .glass { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(10px); }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200 min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-50 glass border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="bg-indigo-600 text-white p-2 rounded-xl">
+          <i data-lucide="newspaper" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="serif font-bold text-xl sm:text-2xl tracking-tight" id="app-title">DAILY PULSE</h1>
+          <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wider uppercase" id="app-subtitle">Auto-Updating Daily Hub</p>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2 sm:space-x-4">
+        <!-- Live Status Indicator -->
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="sync-status">Live News</span>
+        </span>
+
+        <!-- Manual Refresh Button -->
+        <button id="refresh-btn" onclick="fetchLiveNews(true)" class="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Force Refresh">
+          <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Language Switcher -->
+        <button id="lang-btn" onclick="toggleLanguage()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition">
+          中文
+        </button>
+
+        <!-- Theme Toggle -->
+        <button id="theme-btn" onclick="toggleTheme()" class="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          <i data-lucide="moon" class="w-5 h-5 dark:hidden"></i>
+          <i data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+    
+    <!-- Category Tabs -->
+    <div class="flex items-center space-x-2 overflow-x-auto pb-4 mb-6 border-b border-slate-200 dark:border-slate-800 no-scrollbar">
+      <button onclick="setCategory('all')" class="cat-btn px-4 py-2 rounded-full text-sm font-medium bg-indigo-600 text-white" data-cat="all">
+        <span class="lang-en">All News</span><span class="lang-zh hidden">所有新聞</span>
+      </button>
+      <button onclick="setCategory('horror')" class="cat-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700" data-cat="horror">
+        <span class="lang-en">🎬 Horror Movies</span><span class="lang-zh hidden">🎬 好萊塢恐怖片</span>
+      </button>
+      <button onclick="setCategory('star')" class="cat-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700" data-cat="star">
+        <span class="lang-en">⭐ Star & Celebrity</span><span class="lang-zh hidden">⭐ 明星八卦</span>
+      </button>
+      <button onclick="setCategory('fashion')" class="cat-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700" data-cat="fashion">
+        <span class="lang-en">✨ Fashion & Style</span><span class="lang-zh hidden">✨ 時尚潮流</span>
+      </button>
+      <button onclick="setCategory('etf')" class="cat-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700" data-cat="etf">
+        <span class="lang-en">📈 ETF & Finance</span><span class="lang-zh hidden">📈 ETF 與財經</span>
+      </button>
+    </div>
+
+    <!-- Last Updated Info -->
+    <div class="text-xs text-slate-400 dark:text-slate-500 mb-6 flex items-center justify-between">
+      <span><i data-lucide="clock" class="w-3.5 h-3.5 inline mr-1"></i> <span id="last-updated-text">Updating...</span></span>
+      <span class="hidden sm:inline" id="auto-refresh-badge">Auto-refreshes every 24 hours</span>
+    </div>
+
+    <!-- News Grid -->
+    <div id="news-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Loading Skeleton -->
+      <div class="animate-pulse bg-white dark:bg-slate-900 rounded-2xl p-4 h-64 border border-slate-200 dark:border-slate-800"></div>
+      <div class="animate-pulse bg-white dark:bg-slate-900 rounded-2xl p-4 h-64 border border-slate-200 dark:border-slate-800"></div>
+      <div class="animate-pulse bg-white dark:bg-slate-900 rounded-2xl p-4 h-64 border border-slate-200 dark:border-slate-800"></div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-6 mt-12 text-center text-xs text-slate-500">
+    <p>© 2026 Daily Pulse News. Powered by Live Google RSS feeds.</p>
+  </footer>
+
+  <script>
+    let currentLang = 'en';
+    let currentCategory = 'all';
+    let articles = [];
+
+    // RSS Feed Search Endpoints (Google News RSS converted via public CORS API)
+    const FEEDS = {
+      horror: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=Hollywood+horror+movie+news&hl=en-US&gl=US&ceid=US:en'),
+      star: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=celebrity+gossip+hollywood+stars&hl=en-US&gl=US&ceid=US:en'),
+      fashion: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=fashion+trends+runway+style&hl=en-US&gl=US&ceid=US:en'),
+      etf: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=ETF+finance+stock+market+news&hl=en-US&gl=US&ceid=US:en')
+    };
+
+    // Category Config
+    const CAT_INFO = {
+      horror: { en: 'Horror Movies', zh: '恐怖片', icon: 'clapperboard', color: 'bg-rose-500' },
+      star: { en: 'Star Gossip', zh: '明星八卦', icon: 'sparkles', color: 'bg-amber-500' },
+      fashion: { en: 'Fashion Trends', zh: '時尚潮流', icon: 'shirt', color: 'bg-purple-500' },
+      etf: { en: 'ETF News', zh: 'ETF 財經', icon: 'trending-up', color: 'bg-emerald-500' }
+    };
+
+    // Load News Function
+    async function fetchLiveNews(force = false) {
+      const btn = document.getElementById('refresh-btn');
+      if (btn) btn.classList.add('animate-spin');
+
+      const cachedData = localStorage.getItem('daily_news_data');
+      const cachedTime = localStorage.getItem('daily_news_time');
+      const isExpired = !cachedTime || (Date.now() - parseInt(cachedTime)) > (24 * 60 * 60 * 1000); // 24 hours
+
+      if (!force && cachedData && !isExpired) {
+        articles = JSON.parse(cachedData);
+        updateLastUpdatedText(new Date(parseInt(cachedTime)));
+        renderNews();
+        if (btn) btn.classList.remove('animate-spin');
+        return;
+      }
+
+      try {
+        let fetchPromises = Object.keys(FEEDS).map(async (cat) => {
+          const res = await fetch(FEEDS[cat]);
+          const data = await res.json();
+          if (data.status === 'ok' && data.items) {
+            return data.items.map(item => ({
+              id: item.guid || item.link,
+              category: cat,
+              title: item.title,
+              snippet: item.description ? item.description.replace(/<[^>]*>?/gm, '').substring(0, 140) + '...' : '',
+              url: item.link,
+              date: new Date(item.pubDate).toLocaleDateString(),
+              source: item.author || 'Google News'
+            }));
+          }
+          return [];
+        });
+
+        const results = await Promise.all(fetchPromises);
+        articles = results.flat().sort(() => Math.random() - 0.5); // Mix categories
+
+        // Save cache
+        localStorage.setItem('daily_news_data', JSON.stringify(articles));
+        localStorage.setItem('daily_news_time', Date.now().toString());
+        updateLastUpdatedText(new Date());
+
+      } catch (err) {
+        console.error('Failed to fetch live RSS:', err);
+      } finally {
+        renderNews();
+        if (btn) btn.classList.remove('animate-spin');
+      }
+    }
+
+    function updateLastUpdatedText(date) {
+      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateStr = date.toLocaleDateString();
+      document.getElementById('last-updated-text').innerText = 
+        currentLang === 'en' ? `Updated: ${dateStr} ${timeStr}` : `更新時間: ${dateStr} ${timeStr}`;
+    }
+
+    function renderNews() {
+      const grid = document.getElementById('news-grid');
+      const filtered = currentCategory === 'all' 
+        ? articles 
+        : articles.filter(a => a.category === currentCategory);
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">No news available right now. Click refresh!</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(item => {
+        const cat = CAT_INFO[item.category];
+        const catName = currentLang === 'en' ? cat.en : cat.zh;
+        return `
+          <article class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold text-white ${cat.color}">
+                  ${catName}
+                </span>
+                <span class="text-xs text-slate-400">${item.date}</span>
+              </div>
+              <h3 class="font-bold text-lg mb-2 line-clamp-2 text-slate-900 dark:text-slate-100 hover:text-indigo-600 transition">
+                <a href="${item.url}" target="_blank" rel="noopener">${item.title}</a>
+              </h3>
+              <p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-3 mb-4">
+                ${item.snippet}
+              </p>
+            </div>
+            <div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <span class="text-xs font-medium text-slate-400">${item.source}</span>
+              <a href="${item.url}" target="_blank" rel="noopener" class="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
+                ${currentLang === 'en' ? 'Read More' : '閱讀全文'} <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+              </a>
+            </div>
+          </article>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    function setCategory(cat) {
+      currentCategory = cat;
+      document.querySelectorAll('.cat-btn').forEach(btn => {
+        if (btn.dataset.cat === cat) {
+          btn.className = "cat-btn px-4 py-2 rounded-full text-sm font-medium bg-indigo-600 text-white";
+        } else {
+          btn.className = "cat-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700";
+        }
+      });
+      renderNews();
+    }
+
+    function toggleLanguage() {
+      currentLang = currentLang === 'en' ? 'zh' : 'en';
+      document.getElementById('lang-btn').innerText = currentLang === 'en' ? '中文' : 'English';
+      
+      document.querySelectorAll('.lang-en').forEach(el => el.classList.toggle('hidden', currentLang === 'zh'));
+      document.querySelectorAll('.lang-zh').forEach(el => el.classList.toggle('hidden', currentLang === 'en'));
+
+      const cachedTime = localStorage.getItem('daily_news_time');
+      if (cachedTime) updateLastUpdatedText(new Date(parseInt(cachedTime)));
+      
+      renderNews();
+    }
+
+    function toggleTheme() {
+      document.documentElement.classList.toggle('dark');
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      fetchLiveNews();
+    });
+  </script>
+</body>
+</html>
