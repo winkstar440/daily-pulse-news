@@ -102,20 +102,20 @@
     let currentCategory = 'all';
     let articles = [];
 
-    // RSS Feed Search Endpoints (Google News RSS converted via public CORS API)
+    // Google News RSS feeds converted via feed2json.org (more reliable than rss2json)
     const FEEDS = {
-      horror: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=Hollywood+horror+movie+news&hl=en-US&gl=US&ceid=US:en'),
-      star: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=celebrity+gossip+hollywood+stars&hl=en-US&gl=US&ceid=US:en'),
-      fashion: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=fashion+trends+runway+style&hl=en-US&gl=US&ceid=US:en'),
-      etf: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://news.google.com/rss/search?q=ETF+finance+stock+market+news&hl=en-US&gl=US&ceid=US:en')
+      horror:  'https://feed2json.org/convert?url=' + encodeURIComponent('https://news.google.com/rss/search?q=Hollywood+horror+movie+news&hl=en-US&gl=US&ceid=US:en'),
+      star:    'https://feed2json.org/convert?url=' + encodeURIComponent('https://news.google.com/rss/search?q=celebrity+gossip+hollywood+stars&hl=en-US&gl=US&ceid=US:en'),
+      fashion: 'https://feed2json.org/convert?url=' + encodeURIComponent('https://news.google.com/rss/search?q=fashion+trends+runway+style&hl=en-US&gl=US&ceid=US:en'),
+      etf:     'https://feed2json.org/convert?url=' + encodeURIComponent('https://news.google.com/rss/search?q=ETF+finance+stock+market+news&hl=en-US&gl=US&ceid=US:en')
     };
 
     // Category Config
     const CAT_INFO = {
-      horror: { en: 'Horror Movies', zh: '恐怖片', icon: 'clapperboard', color: 'bg-rose-500' },
-      star: { en: 'Star Gossip', zh: '明星八卦', icon: 'sparkles', color: 'bg-amber-500' },
-      fashion: { en: 'Fashion Trends', zh: '時尚潮流', icon: 'shirt', color: 'bg-purple-500' },
-      etf: { en: 'ETF News', zh: 'ETF 財經', icon: 'trending-up', color: 'bg-emerald-500' }
+      horror:  { en: 'Horror Movies', zh: '恐怖片',   color: 'bg-rose-500' },
+      star:    { en: 'Star Gossip',   zh: '明星八卦', color: 'bg-amber-500' },
+      fashion: { en: 'Fashion Trends',zh: '時尚潮流', color: 'bg-purple-500' },
+      etf:     { en: 'ETF News',      zh: 'ETF 財經', color: 'bg-emerald-500' }
     };
 
     // Load News Function
@@ -136,21 +136,30 @@
       }
 
       try {
-        let fetchPromises = Object.keys(FEEDS).map(async (cat) => {
-          const res = await fetch(FEEDS[cat]);
-          const data = await res.json();
-          if (data.status === 'ok' && data.items) {
-            return data.items.map(item => ({
-              id: item.guid || item.link,
-              category: cat,
-              title: item.title,
-              snippet: item.description ? item.description.replace(/<[^>]*>?/gm, '').substring(0, 140) + '...' : '',
-              url: item.link,
-              date: new Date(item.pubDate).toLocaleDateString(),
-              source: item.author || 'Google News'
-            }));
+        const fetchPromises = Object.keys(FEEDS).map(async (cat) => {
+          try {
+            const res = await fetch(FEEDS[cat]);
+            const data = await res.json();
+            if (data.items && Array.isArray(data.items)) {
+              return data.items.slice(0, 12).map(item => ({
+                id: item.guid || item.url || item.id,
+                category: cat,
+                title: item.title || 'No title',
+                snippet: (item.content_text || item.summary || item.content_html || '')
+                  .replace(/<[^>]*>?/gm, '')
+                  .substring(0, 140) + (item.content_text || item.summary ? '...' : ''),
+                url: item.url || item.link || '#',
+                date: item.date_published 
+                  ? new Date(item.date_published).toLocaleDateString() 
+                  : (item.date_modified ? new Date(item.date_modified).toLocaleDateString() : ''),
+                source: (item.author && item.author.name) || 'Google News'
+              }));
+            }
+            return [];
+          } catch (e) {
+            console.warn('Failed to fetch category:', cat, e);
+            return [];
           }
-          return [];
         });
 
         const results = await Promise.all(fetchPromises);
@@ -162,7 +171,7 @@
         updateLastUpdatedText(new Date());
 
       } catch (err) {
-        console.error('Failed to fetch live RSS:', err);
+        console.error('Failed to fetch live feeds:', err);
       } finally {
         renderNews();
         if (btn) btn.classList.remove('animate-spin');
@@ -183,7 +192,12 @@
         : articles.filter(a => a.category === currentCategory);
 
       if (filtered.length === 0) {
-        grid.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">No news available right now. Click refresh!</div>`;
+        grid.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">
+          <p class="mb-3">No news available right now.</p>
+          <button onclick="fetchLiveNews(true)" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition">
+            Click to Refresh
+          </button>
+        </div>`;
         return;
       }
 
