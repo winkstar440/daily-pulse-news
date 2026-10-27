@@ -24,29 +24,25 @@
           <i data-lucide="newspaper" class="w-6 h-6"></i>
         </div>
         <div>
-          <h1 class="serif font-bold text-xl sm:text-2xl tracking-tight" id="app-title">DAILY PULSE</h1>
-          <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wider uppercase" id="app-subtitle">Auto-Updating Daily Hub</p>
+          <h1 class="serif font-bold text-xl sm:text-2xl tracking-tight">DAILY PULSE</h1>
+          <p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wider uppercase">Auto-Updating Daily Hub</p>
         </div>
       </div>
 
       <div class="flex items-center space-x-2 sm:space-x-4">
-        <!-- Live Status Indicator -->
         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span id="sync-status">Live News</span>
+          <span>Live News</span>
         </span>
 
-        <!-- Manual Refresh Button -->
         <button id="refresh-btn" onclick="fetchLiveNews(true)" class="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Force Refresh">
           <i data-lucide="refresh-cw" class="w-5 h-5"></i>
         </button>
 
-        <!-- Language Switcher -->
         <button id="lang-btn" onclick="toggleLanguage()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition">
           中文
         </button>
 
-        <!-- Theme Toggle -->
         <button id="theme-btn" onclick="toggleTheme()" class="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
           <i data-lucide="moon" class="w-5 h-5 dark:hidden"></i>
           <i data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
@@ -55,7 +51,6 @@
     </div>
   </header>
 
-  <!-- Main Container -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
     
     <!-- Category Tabs -->
@@ -77,24 +72,20 @@
       </button>
     </div>
 
-    <!-- Last Updated Info -->
     <div class="text-xs text-slate-400 dark:text-slate-500 mb-6 flex items-center justify-between">
       <span><i data-lucide="clock" class="w-3.5 h-3.5 inline mr-1"></i> <span id="last-updated-text">Updating...</span></span>
-      <span class="hidden sm:inline" id="auto-refresh-badge">Auto-refreshes every 24 hours</span>
+      <span class="hidden sm:inline">Auto-refreshes every 24 hours</span>
     </div>
 
-    <!-- News Grid -->
     <div id="news-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <!-- Loading Skeleton -->
       <div class="animate-pulse bg-white dark:bg-slate-900 rounded-2xl p-4 h-64 border border-slate-200 dark:border-slate-800"></div>
       <div class="animate-pulse bg-white dark:bg-slate-900 rounded-2xl p-4 h-64 border border-slate-200 dark:border-slate-800"></div>
       <div class="animate-pulse bg-white dark:bg-slate-900 rounded-2xl p-4 h-64 border border-slate-200 dark:border-slate-800"></div>
     </div>
   </main>
 
-  <!-- Footer -->
   <footer class="border-t border-slate-200 dark:border-slate-800 py-6 mt-12 text-center text-xs text-slate-500">
-    <p>© 2026 Daily Pulse News. Powered by Live Google RSS feeds.</p>
+    <p>© 2026 Daily Pulse News · Powered by public RSS feeds</p>
   </footer>
 
   <script>
@@ -102,30 +93,74 @@
     let currentCategory = 'all';
     let articles = [];
 
-    // Google News RSS feeds converted via feed2json.org (more reliable than rss2json)
+    // Reliable public RSS feeds (via CORS proxy)
+    const PROXY = 'https://proxy.cors.dev/';
     const FEEDS = {
-      horror:  'https://feed2json.org/convert?url=' + encodeURIComponent('https://news.google.com/rss/search?q=Hollywood+horror+movie+news&hl=en-US&gl=US&ceid=US:en'),
-      star:    'https://feed2json.org/convert?url=' + encodeURIComponent('https://news.google.com/rss/search?q=celebrity+gossip+hollywood+stars&hl=en-US&gl=US&ceid=US:en'),
-      fashion: 'https://feed2json.org/convert?url=' + encodeURIComponent('https://news.google.com/rss/search?q=fashion+trends+runway+style&hl=en-US&gl=US&ceid=US:en'),
-      etf:     'https://feed2json.org/convert?url=' + encodeURIComponent('https://news.google.com/rss/search?q=ETF+finance+stock+market+news&hl=en-US&gl=US&ceid=US:en')
+      horror:  [
+        'https://bloody-disgusting.com/feed/',
+        'https://ihorror.com/feed/'
+      ],
+      star: [
+        'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml',
+        'https://www.hollywoodreporter.com/c/movies/feed/'
+      ],
+      fashion: [
+        'https://www.vogue.com/feed/rss',
+        'https://rss.nytimes.com/services/xml/rss/nyt/FashionandStyle.xml'
+      ],
+      etf: [
+        'https://feeds.marketwatch.com/marketwatch/topstories/',
+        'https://feeds.bbci.co.uk/news/business/rss.xml'
+      ]
     };
 
-    // Category Config
     const CAT_INFO = {
       horror:  { en: 'Horror Movies', zh: '恐怖片',   color: 'bg-rose-500' },
       star:    { en: 'Star Gossip',   zh: '明星八卦', color: 'bg-amber-500' },
       fashion: { en: 'Fashion Trends',zh: '時尚潮流', color: 'bg-purple-500' },
-      etf:     { en: 'ETF News',      zh: 'ETF 財經', color: 'bg-emerald-500' }
+      etf:     { en: 'ETF & Finance', zh: 'ETF 財經', color: 'bg-emerald-500' }
     };
 
-    // Load News Function
+    function parseRSS(xmlText, category) {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlText, 'text/xml');
+      const items = xml.querySelectorAll('item');
+      const results = [];
+
+      items.forEach((item, idx) => {
+        if (idx >= 10) return; // limit per feed
+        const title = item.querySelector('title')?.textContent?.trim() || 'No title';
+        const link = item.querySelector('link')?.textContent?.trim() || item.querySelector('link')?.getAttribute('href') || '#';
+        let desc = item.querySelector('description')?.textContent || item.querySelector('content\\:encoded')?.textContent || '';
+        desc = desc.replace(/<[^>]*>?/gm, '').substring(0, 140).trim();
+        if (desc) desc += '...';
+
+        const pubDate = item.querySelector('pubDate')?.textContent;
+        const date = pubDate ? new Date(pubDate).toLocaleDateString() : '';
+
+        // Try to get source name from channel or default
+        const source = xml.querySelector('channel > title')?.textContent?.trim() || 'News';
+
+        results.push({
+          id: link + idx,
+          category,
+          title,
+          snippet: desc,
+          url: link,
+          date,
+          source: source.replace(/ - .*$/, '').substring(0, 40)
+        });
+      });
+      return results;
+    }
+
     async function fetchLiveNews(force = false) {
       const btn = document.getElementById('refresh-btn');
       if (btn) btn.classList.add('animate-spin');
 
-      const cachedData = localStorage.getItem('daily_news_data');
-      const cachedTime = localStorage.getItem('daily_news_time');
-      const isExpired = !cachedTime || (Date.now() - parseInt(cachedTime)) > (24 * 60 * 60 * 1000); // 24 hours
+      const cachedData = localStorage.getItem('daily_news_data_v2');
+      const cachedTime = localStorage.getItem('daily_news_time_v2');
+      const isExpired = !cachedTime || (Date.now() - parseInt(cachedTime)) > (24 * 60 * 60 * 1000);
 
       if (!force && cachedData && !isExpired) {
         articles = JSON.parse(cachedData);
@@ -136,42 +171,31 @@
       }
 
       try {
-        const fetchPromises = Object.keys(FEEDS).map(async (cat) => {
-          try {
-            const res = await fetch(FEEDS[cat]);
-            const data = await res.json();
-            if (data.items && Array.isArray(data.items)) {
-              return data.items.slice(0, 12).map(item => ({
-                id: item.guid || item.url || item.id,
-                category: cat,
-                title: item.title || 'No title',
-                snippet: (item.content_text || item.summary || item.content_html || '')
-                  .replace(/<[^>]*>?/gm, '')
-                  .substring(0, 140) + (item.content_text || item.summary ? '...' : ''),
-                url: item.url || item.link || '#',
-                date: item.date_published 
-                  ? new Date(item.date_published).toLocaleDateString() 
-                  : (item.date_modified ? new Date(item.date_modified).toLocaleDateString() : ''),
-                source: (item.author && item.author.name) || 'Google News'
-              }));
-            }
-            return [];
-          } catch (e) {
-            console.warn('Failed to fetch category:', cat, e);
-            return [];
+        const allPromises = [];
+
+        for (const [cat, urls] of Object.entries(FEEDS)) {
+          for (const url of urls) {
+            allPromises.push(
+              fetch(PROXY + url)
+                .then(r => r.text())
+                .then(xml => parseRSS(xml, cat))
+                .catch(err => {
+                  console.warn('Feed failed:', url, err);
+                  return [];
+                })
+            );
           }
-        });
+        }
 
-        const results = await Promise.all(fetchPromises);
-        articles = results.flat().sort(() => Math.random() - 0.5); // Mix categories
+        const results = await Promise.all(allPromises);
+        articles = results.flat().sort(() => Math.random() - 0.5);
 
-        // Save cache
-        localStorage.setItem('daily_news_data', JSON.stringify(articles));
-        localStorage.setItem('daily_news_time', Date.now().toString());
+        localStorage.setItem('daily_news_data_v2', JSON.stringify(articles));
+        localStorage.setItem('daily_news_time_v2', Date.now().toString());
         updateLastUpdatedText(new Date());
 
       } catch (err) {
-        console.error('Failed to fetch live feeds:', err);
+        console.error('Fetch error:', err);
       } finally {
         renderNews();
         if (btn) btn.classList.remove('animate-spin');
@@ -181,23 +205,24 @@
     function updateLastUpdatedText(date) {
       const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const dateStr = date.toLocaleDateString();
-      document.getElementById('last-updated-text').innerText = 
+      document.getElementById('last-updated-text').innerText =
         currentLang === 'en' ? `Updated: ${dateStr} ${timeStr}` : `更新時間: ${dateStr} ${timeStr}`;
     }
 
     function renderNews() {
       const grid = document.getElementById('news-grid');
-      const filtered = currentCategory === 'all' 
-        ? articles 
+      const filtered = currentCategory === 'all'
+        ? articles
         : articles.filter(a => a.category === currentCategory);
 
       if (filtered.length === 0) {
-        grid.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">
-          <p class="mb-3">No news available right now.</p>
-          <button onclick="fetchLiveNews(true)" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition">
-            Click to Refresh
-          </button>
-        </div>`;
+        grid.innerHTML = `
+          <div class="col-span-full text-center py-16 text-slate-400">
+            <p class="mb-4 text-lg">No news available right now.</p>
+            <button onclick="fetchLiveNews(true)" class="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition">
+              Click to Refresh
+            </button>
+          </div>`;
         return;
       }
 
@@ -217,11 +242,11 @@
                 <a href="${item.url}" target="_blank" rel="noopener">${item.title}</a>
               </h3>
               <p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-3 mb-4">
-                ${item.snippet}
+                ${item.snippet || ''}
               </p>
             </div>
             <div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <span class="text-xs font-medium text-slate-400">${item.source}</span>
+              <span class="text-xs font-medium text-slate-400 truncate max-w-[140px]">${item.source}</span>
               <a href="${item.url}" target="_blank" rel="noopener" class="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
                 ${currentLang === 'en' ? 'Read More' : '閱讀全文'} <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
               </a>
@@ -248,13 +273,13 @@
     function toggleLanguage() {
       currentLang = currentLang === 'en' ? 'zh' : 'en';
       document.getElementById('lang-btn').innerText = currentLang === 'en' ? '中文' : 'English';
-      
+
       document.querySelectorAll('.lang-en').forEach(el => el.classList.toggle('hidden', currentLang === 'zh'));
       document.querySelectorAll('.lang-zh').forEach(el => el.classList.toggle('hidden', currentLang === 'en'));
 
-      const cachedTime = localStorage.getItem('daily_news_time');
+      const cachedTime = localStorage.getItem('daily_news_time_v2');
       if (cachedTime) updateLastUpdatedText(new Date(parseInt(cachedTime)));
-      
+
       renderNews();
     }
 
@@ -262,7 +287,6 @@
       document.documentElement.classList.toggle('dark');
     }
 
-    // Initialize on page load
     document.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
       fetchLiveNews();
