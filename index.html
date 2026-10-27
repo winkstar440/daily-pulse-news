@@ -32,7 +32,7 @@
       <div class="flex items-center space-x-2 sm:space-x-4">
         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Live News</span>
+          <span class="lang-en">Live News</span><span class="lang-zh hidden">即時新聞</span>
         </span>
 
         <button id="refresh-btn" onclick="fetchLiveNews(true)" class="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" title="Force Refresh">
@@ -70,11 +70,17 @@
       <button onclick="setCategory('etf')" class="cat-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700" data-cat="etf">
         <span class="lang-en">📈 ETF & Finance</span><span class="lang-zh hidden">📈 ETF 與財經</span>
       </button>
+      <button onclick="setCategory('ai')" class="cat-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700" data-cat="ai">
+        <span class="lang-en">🤖 AI & Tech</span><span class="lang-zh hidden">🤖 人工智慧</span>
+      </button>
     </div>
 
     <div class="text-xs text-slate-400 dark:text-slate-500 mb-6 flex items-center justify-between">
       <span><i data-lucide="clock" class="w-3.5 h-3.5 inline mr-1"></i> <span id="last-updated-text">Updating...</span></span>
-      <span class="hidden sm:inline">Auto-refreshes every 24 hours</span>
+      <span class="hidden sm:inline" id="auto-refresh-badge">
+        <span class="lang-en">Auto-refreshes every 24 hours</span>
+        <span class="lang-zh hidden">每 24 小時自動更新</span>
+      </span>
     </div>
 
     <div id="news-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -92,6 +98,7 @@
     let currentLang = 'en';
     let currentCategory = 'all';
     let articles = [];
+    const translationCache = JSON.parse(localStorage.getItem('daily_trans_cache') || '{}');
 
     // Reliable public RSS feeds (via CORS proxy)
     const PROXY = 'https://proxy.cors.dev/';
@@ -111,6 +118,11 @@
       etf: [
         'https://feeds.marketwatch.com/marketwatch/topstories/',
         'https://feeds.bbci.co.uk/news/business/rss.xml'
+      ],
+      ai: [
+        'https://techcrunch.com/category/artificial-intelligence/feed/',
+        'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml',
+        'https://www.technologyreview.com/feed/'
       ]
     };
 
@@ -118,8 +130,39 @@
       horror:  { en: 'Horror Movies', zh: '恐怖片',   color: 'bg-rose-500' },
       star:    { en: 'Star Gossip',   zh: '明星八卦', color: 'bg-amber-500' },
       fashion: { en: 'Fashion Trends',zh: '時尚潮流', color: 'bg-purple-500' },
-      etf:     { en: 'ETF & Finance', zh: 'ETF 財經', color: 'bg-emerald-500' }
+      etf:     { en: 'ETF & Finance', zh: 'ETF 財經', color: 'bg-emerald-500' },
+      ai:      { en: 'AI & Tech',     zh: '人工智慧', color: 'bg-sky-500' }
     };
+
+    // Translate text using Google Translate unofficial endpoint
+    async function translateText(text) {
+      if (!text || text.length < 2) return text;
+      const key = text.substring(0, 120);
+      if (translationCache[key]) return translationCache[key];
+
+      try {
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=${encodeURIComponent(text)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        let translated = '';
+        if (data && data[0]) {
+          data[0].forEach(part => { if (part[0]) translated += part[0]; });
+        }
+        if (translated) {
+          translationCache[key] = translated;
+          // Keep cache size reasonable
+          const keys = Object.keys(translationCache);
+          if (keys.length > 400) {
+            keys.slice(0, 100).forEach(k => delete translationCache[k]);
+          }
+          localStorage.setItem('daily_trans_cache', JSON.stringify(translationCache));
+          return translated;
+        }
+      } catch (e) {
+        console.warn('Translation failed', e);
+      }
+      return text; // fallback to original
+    }
 
     function parseRSS(xmlText, category) {
       const parser = new DOMParser();
@@ -128,7 +171,7 @@
       const results = [];
 
       items.forEach((item, idx) => {
-        if (idx >= 10) return; // limit per feed
+        if (idx >= 8) return;
         const title = item.querySelector('title')?.textContent?.trim() || 'No title';
         const link = item.querySelector('link')?.textContent?.trim() || item.querySelector('link')?.getAttribute('href') || '#';
         let desc = item.querySelector('description')?.textContent || item.querySelector('content\\:encoded')?.textContent || '';
@@ -138,17 +181,18 @@
         const pubDate = item.querySelector('pubDate')?.textContent;
         const date = pubDate ? new Date(pubDate).toLocaleDateString() : '';
 
-        // Try to get source name from channel or default
         const source = xml.querySelector('channel > title')?.textContent?.trim() || 'News';
 
         results.push({
-          id: link + idx,
+          id: (link || title) + idx,
           category,
           title,
           snippet: desc,
           url: link,
           date,
-          source: source.replace(/ - .*$/, '').substring(0, 40)
+          source: source.replace(/ - .*$/, '').substring(0, 40),
+          titleZh: null,
+          snippetZh: null
         });
       });
       return results;
@@ -158,14 +202,14 @@
       const btn = document.getElementById('refresh-btn');
       if (btn) btn.classList.add('animate-spin');
 
-      const cachedData = localStorage.getItem('daily_news_data_v2');
-      const cachedTime = localStorage.getItem('daily_news_time_v2');
+      const cachedData = localStorage.getItem('daily_news_data_v3');
+      const cachedTime = localStorage.getItem('daily_news_time_v3');
       const isExpired = !cachedTime || (Date.now() - parseInt(cachedTime)) > (24 * 60 * 60 * 1000);
 
       if (!force && cachedData && !isExpired) {
         articles = JSON.parse(cachedData);
         updateLastUpdatedText(new Date(parseInt(cachedTime)));
-        renderNews();
+        await renderNews();
         if (btn) btn.classList.remove('animate-spin');
         return;
       }
@@ -190,14 +234,14 @@
         const results = await Promise.all(allPromises);
         articles = results.flat().sort(() => Math.random() - 0.5);
 
-        localStorage.setItem('daily_news_data_v2', JSON.stringify(articles));
-        localStorage.setItem('daily_news_time_v2', Date.now().toString());
+        localStorage.setItem('daily_news_data_v3', JSON.stringify(articles));
+        localStorage.setItem('daily_news_time_v3', Date.now().toString());
         updateLastUpdatedText(new Date());
 
       } catch (err) {
         console.error('Fetch error:', err);
       } finally {
-        renderNews();
+        await renderNews();
         if (btn) btn.classList.remove('animate-spin');
       }
     }
@@ -209,7 +253,7 @@
         currentLang === 'en' ? `Updated: ${dateStr} ${timeStr}` : `更新時間: ${dateStr} ${timeStr}`;
     }
 
-    function renderNews() {
+    async function renderNews() {
       const grid = document.getElementById('news-grid');
       const filtered = currentCategory === 'all'
         ? articles
@@ -218,17 +262,42 @@
       if (filtered.length === 0) {
         grid.innerHTML = `
           <div class="col-span-full text-center py-16 text-slate-400">
-            <p class="mb-4 text-lg">No news available right now.</p>
+            <p class="mb-4 text-lg">${currentLang === 'en' ? 'No news available right now.' : '目前沒有新聞。'}</p>
             <button onclick="fetchLiveNews(true)" class="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition">
-              Click to Refresh
+              ${currentLang === 'en' ? 'Click to Refresh' : '點擊重新整理'}
             </button>
           </div>`;
         return;
       }
 
+      // Show skeleton while translating if needed
+      if (currentLang === 'zh') {
+        grid.innerHTML = filtered.slice(0, 6).map(() =>
+          `<div class="animate-pulse bg-white dark:bg-slate-900 rounded-2xl p-4 h-64 border border-slate-200 dark:border-slate-800"></div>`
+        ).join('');
+      }
+
+      // Translate titles & snippets if Chinese mode
+      if (currentLang === 'zh') {
+        const toTranslate = filtered.filter(a => !a.titleZh);
+        // Translate in batches of 5 to avoid rate issues
+        for (let i = 0; i < toTranslate.length; i += 5) {
+          const batch = toTranslate.slice(i, i + 5);
+          await Promise.all(batch.map(async (item) => {
+            item.titleZh = await translateText(item.title);
+            if (item.snippet) item.snippetZh = await translateText(item.snippet);
+          }));
+        }
+        // Save updated articles with translations
+        localStorage.setItem('daily_news_data_v3', JSON.stringify(articles));
+      }
+
       grid.innerHTML = filtered.map(item => {
         const cat = CAT_INFO[item.category];
         const catName = currentLang === 'en' ? cat.en : cat.zh;
+        const displayTitle = currentLang === 'zh' && item.titleZh ? item.titleZh : item.title;
+        const displaySnippet = currentLang === 'zh' && item.snippetZh ? item.snippetZh : (item.snippet || '');
+
         return `
           <article class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
             <div>
@@ -239,10 +308,10 @@
                 <span class="text-xs text-slate-400">${item.date}</span>
               </div>
               <h3 class="font-bold text-lg mb-2 line-clamp-2 text-slate-900 dark:text-slate-100 hover:text-indigo-600 transition">
-                <a href="${item.url}" target="_blank" rel="noopener">${item.title}</a>
+                <a href="${item.url}" target="_blank" rel="noopener">${displayTitle}</a>
               </h3>
               <p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-3 mb-4">
-                ${item.snippet || ''}
+                ${displaySnippet}
               </p>
             </div>
             <div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
@@ -270,17 +339,17 @@
       renderNews();
     }
 
-    function toggleLanguage() {
+    async function toggleLanguage() {
       currentLang = currentLang === 'en' ? 'zh' : 'en';
       document.getElementById('lang-btn').innerText = currentLang === 'en' ? '中文' : 'English';
 
       document.querySelectorAll('.lang-en').forEach(el => el.classList.toggle('hidden', currentLang === 'zh'));
       document.querySelectorAll('.lang-zh').forEach(el => el.classList.toggle('hidden', currentLang === 'en'));
 
-      const cachedTime = localStorage.getItem('daily_news_time_v2');
+      const cachedTime = localStorage.getItem('daily_news_time_v3');
       if (cachedTime) updateLastUpdatedText(new Date(parseInt(cachedTime)));
 
-      renderNews();
+      await renderNews();
     }
 
     function toggleTheme() {
