@@ -1,4 +1,5 @@
 # Daily Pulse | Auto-Updating News Hub
+https://winkstar440.github.io/daily-pulse-news/
 
 A clean, modern, bilingual (English / 中文) daily news dashboard that automatically pulls the latest stories from Google News RSS feeds.
 
